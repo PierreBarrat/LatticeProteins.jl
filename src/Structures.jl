@@ -41,9 +41,10 @@ struct Structure{N}
     path::Vector{Site}
     contacts::Vector{Tuple{Int,Int}}
 
-    function Structure{N}(path::Vector{Site}) where {N<:Int8}
+    function Structure{N}(path::Vector{Site}) where {N}
         # ---- Validation ----
-        @argcheck length(path) == N^3 "Path must contain N^3 sites"
+        @argcheck N isa Integer && N > 0 "N must be a positive integer, instead $N"
+        @argcheck length(path) == N^3 "Path must contain N^3 sites, instead $(length(path))"
         @argcheck allunique(path) "All sites in path must be unique"
 
         # Check all coordinates are in valid range
@@ -56,12 +57,10 @@ struct Structure{N}
             @argcheck is_neighbour(path[i], path[i + 1]) "Consecutive sites must be neighbours"
         end
 
-        return new{N}(path, compute_contacts(path))
+        return new{Int8(N)}(path, compute_contacts(path))
     end
 end
 
-# Cast any integer type parameter to Int8 before calling the inner constructor
-Structure{N}(path::Vector{Site}) where {N<:Integer} = Structure{Int8(N)}(path)
 # Convenience constructor (infers N from path)
 Structure(path::Vector{Site}) = Structure{_infer_N(path)}(path)
 
