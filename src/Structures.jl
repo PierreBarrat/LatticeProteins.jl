@@ -33,7 +33,7 @@ site(x, y, z) = (x=Int8(x), y=Int8(y), z=Int8(z))
 A Hamiltonian path through an NxNxN cubic lattice.
 
 # Fields
-- `path::Vector{Site}`: Sequence of all N³ sites, each visited exactly once
+- `path::Vector{Site}`: Sequence of all N^3 sites, each visited exactly once
 - `contacts::Vector{Tuple{Int, Int}}`: Path index pairs (i, j) where sites are
   lattice-adjacent but not consecutive in the path
 """
@@ -43,7 +43,7 @@ struct Structure{N}
 
     function Structure{N}(path::Vector{Site}) where {N<:Int8}
         # ---- Validation ----
-        @argcheck length(path) == N^3 "Path must contain N³ sites"
+        @argcheck length(path) == N^3 "Path must contain N^3 sites"
         @argcheck allunique(path) "All sites in path must be unique"
 
         # Check all coordinates are in valid range
@@ -127,8 +127,20 @@ end
 # Symetries
 ############################################################################################
 
-function generate_rotation_table(N::Integer) # this hardcodes dimension 3
-    table = Vector{Dict{Site,Site}}(undef, 48)
+# Linear index for a site in the NxNxN lattice (1-based)
+_site_id(s::Site, N::Int) = Int((s.x - 1) * N^2 + (s.y - 1) * N + s.z)
+function _id_to_site(id::Integer, N::Int)
+    return site((id - 1) ÷ N^2 + 1, (id - 1) % N^2 ÷ N + 1, (id - 1) % N + 1)
+end
+
+"""
+    generate_rotation_table(N) -> Matrix{Int8}  (N^3 x 48)
+
+Each column is one of the 48 cube symmetries. Entry [i, r] is the site ID that
+site i maps to under rotation r. Integer indexing — no hashing.
+"""
+function generate_rotation_table(N::Integer)
+    table = Matrix{Int8}(undef, N^3, 48)
 
     # permutations of axes
     perms = [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
@@ -139,52 +151,41 @@ function generate_rotation_table(N::Integer) # this hardcodes dimension 3
     # cube center for easy rotation
     x0, y0, z0 = (1 + N) / 2, (1 + N) / 2, (1 + N) / 2
 
-    id = 1
+    rot_id = 1
     for p in perms, s in signs
-        table[id] = Dict{Site,Site}()
         for x in 1:N, y in 1:N, z in 1:N
             r = [x - x0, y - y0, z - z0]
             r = [r[p[i]] * s[i] for i in 1:3]
-            r += [x0, y0, z0]
-            table[id][site(x, y, z)] = site(r[1], r[2], r[3])
+            r .+= [x0, y0, z0]
+            table[_site_id(site(x, y, z), N), rot_id] = _site_id(site(r[1], r[2], r[3]), N)
         end
-        id += 1
+        rot_id += 1
     end
 
     return table
 end
 
-function rotations(path::Vector{Site}, table)
-    return map(table) do rot
-        rotated_path = copy(path)
-        for (i, site) in enumerate(path)
-            rotated_path[i] = rot[site]
-        end
-        rotated_path
-    end
-end
+"""
+    canonical(path, rotation_table, N) -> Vector{Site}
 
-function canonical(path::Vector{Site}, rotation_table)
-    best_rotated_path = copy(path)
-    rotated_path = copy(path)
-    # find best symetry
-    idx = 1
-    for (i, rot) in enumerate(rotation_table)
-        for (j, site) in enumerate(path)
-            rotated_path[j] = rot[site]
+Return the lexicographically minimal rotation of `path`.
+Works on integer site IDs internally — no hashing.
+"""
+function canonical(path::Vector{Site}, rotation_table::Matrix{Int8}, N::Int)
+    path_ids = Int8[_site_id(s, N) for s in path]
+    best = copy(path_ids)
+    current = similar(path_ids)
+
+    for r in axes(rotation_table, 2)
+        for i in eachindex(path_ids)
+            current[i] = rotation_table[path_ids[i], r]
         end
-        if rotated_path < best_rotated_path
-            best_rotated_path = copy(rotated_path)
-            idx = i
+        if current < best
+            best .= current
         end
     end
 
-    # apply best symetry
-    for (i, site) in enumerate(path)
-        rotated_path[i] = rotation_table[idx][site]
-    end
-
-    return rotated_path
+    return [_id_to_site(id, N) for id in best]
 end
 
 ############################################################################################
@@ -205,11 +206,14 @@ function build_adj(N::Int)
     return adj
 end
 
-function add_canonical!(paths::Set{Vector{Site}}, candidate::Vector{Site}, rotation_table)
-    return push!(paths, canonical(candidate, rotation_table))
+function add_canonical!(
+    paths::Set{Vector{Site}}, candidate::Vector{Site}, rotation_table::Matrix{Int8}, N::Int
+)
+    return push!(paths, canonical(candidate, rotation_table, N))
 end
+
 """
-    grow!(path, visited, adj, results)
+    grow!(path, visited, adj, rotation_table, N, results)
 
 In-place recursive backtracking: extend `path` with unvisited neighbours until
 all sites are visited, then push a copy into `results`.
@@ -218,17 +222,14 @@ all sites are visited, then push a copy into `results`.
 """
 function grow!(
     path::Vector{Site},
-    visited::Array{Bool,3}, # (x, y, z) -> bool
-    adj::Array{Vector{Site},3}, # (x, y, z) -> neighbours
-    rotation_table::Vector{Dict{Site,Site}}, # rot_id -> Dict(site => rotated_site)
-    results::Set{Vector{Site}}, # Set since we'll filter for symetries
+    visited::Array{Bool,3},
+    adj::Array{Vector{Site},3},
+    rotation_table::Matrix{Int8},
+    N::Int,
+    results::Set{Vector{Site}},
 )
     if length(path) == length(visited)
-        # push!(results, copy(path))
-        if length(results) == 4
-            # Main.@infiltrate
-        end
-        add_canonical!(results, path, rotation_table) # path copied internally
+        add_canonical!(results, path, rotation_table, N)
         return nothing
     end
     s = path[end]
@@ -236,7 +237,7 @@ function grow!(
         visited[nb.x, nb.y, nb.z] && continue
         visited[nb.x, nb.y, nb.z] = true
         push!(path, nb)
-        grow!(path, visited, adj, rotation_table, results)
+        grow!(path, visited, adj, rotation_table, N, results)
         pop!(path)
         visited[nb.x, nb.y, nb.z] = false
     end
@@ -266,7 +267,7 @@ function generate_all_paths(N::Int)
         path = [start]
         visited = zeros(Bool, N, N, N)
         visited[start.x, start.y, start.z] = true
-        grow!(path, visited, adj, rotation_table, all_paths)
+        grow!(path, visited, adj, rotation_table, N, all_paths)
     end
     return all_paths
 end
@@ -275,22 +276,11 @@ end
     generate_structures(N::Int) -> Vector{Structure{N}}
 
 Generate all unique Hamiltonian paths for an NxNxN lattice.
-Uses hybrid approach: grow() recursion + rotation canonicalization.
+Uses grow() recursion + rotation canonicalization to deduplicate.
 """
 function generate_structures(N::Int)
-    # 1. Generate all raw paths using grow()
-    return raw_paths = generate_all_paths(N)
-
-    # 2. Canonicalize each path (find minimal rotation)
-
-    # 3. Convert to Structure
-    # return [Structure{N}(collect(path)) for path in canonical_paths]
-end
-
-# Placeholder for canonicalization
-function canonicalize(path::Vector{Site}, N::Int)
-    @warn "Not implemented yet"
-    return path
+    paths = generate_all_paths(N)
+    return [Structure{N}(path) for path in paths]
 end
 
 end # module Structure
