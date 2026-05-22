@@ -1,0 +1,24 @@
+name = "LatticeProteins"
+uuid = "585ddab6-e757-4842-8639-effc37d79e36"
+version = "0.1.0"
+authors = ["Pierre Barrat-Charlaix"]
+
+[deps]
+ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
+ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+
+[compat]
+Aqua = "0.8"
+ArgCheck = "2.5.0"
+ProgressMeter = "1.11.0"
+RecipesBase = "1"
+Test = "1.11"
+julia = "1.11"
+
+[extras]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test", "Aqua"]
