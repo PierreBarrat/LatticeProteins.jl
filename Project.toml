@@ -5,13 +5,19 @@ authors = ["Pierre Barrat-Charlaix"]
 
 [deps]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
 
 [compat]
 Aqua = "0.8"
 ArgCheck = "2.5.0"
+DelimitedFiles = "1.9.1"
+JLD2 = "0.6.4"
 ProgressMeter = "1.11.0"
+Random = "1.11.0"
 RecipesBase = "1"
 Test = "1.11"
 julia = "1.11"

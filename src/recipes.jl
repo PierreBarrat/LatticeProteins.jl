@@ -1,15 +1,16 @@
 using RecipesBase
 
-@recipe function f(chain::Vector{Site})
-    N = Int(maximum(max(s.x, s.y, s.z) for s in chain))
+@recipe function f(s::Structure)
+    N = Int(LatticeProteins.Structures._infer_N(s.path))
+    chain = s.path
 
     legend --> false
     aspect_ratio --> :equal
     showaxis --> false
     grid --> true
-    xticks --> (1:0.5:N, fill("", N))
-    yticks --> (1:0.5:N, fill("", N))
-    zticks --> (1:0.5:N, fill("", N))
+    xticks --> (1:0.5:N, fill("", 2N - 1))
+    yticks --> (1:0.5:N, fill("", 2N - 1))
+    zticks --> (1:0.5:N, fill("", 2N - 1))
     xlim --> (1, N)
     ylim --> (1, N)
     zlim --> (1, N)
@@ -55,8 +56,4 @@ using RecipesBase
         label := ""
         [chain[end].x], [chain[end].y], [chain[end].z]
     end
-end
-
-@recipe function f(s::Structure)
-    return s.path
 end

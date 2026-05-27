@@ -46,9 +46,6 @@ end |> collect
 # ╔═╡ a3277627-b691-4929-95b8-3f178c628072
 length(paths)
 
-# ╔═╡ 0b8eb74f-afac-42d5-a2ee-9c863180ad38
-
-
 # ╔═╡ 427236ee-a570-48e9-b727-3bbc35f81e5a
 let
 	plts = map(plot, collect(paths))
@@ -145,7 +142,6 @@ plot_chain(first(paths))
 # ╠═eb7c05f6-0982-433c-9756-49e447d12033
 # ╠═15863399-8360-4823-bd90-7670d380ad03
 # ╠═a3277627-b691-4929-95b8-3f178c628072
-# ╠═0b8eb74f-afac-42d5-a2ee-9c863180ad38
 # ╠═427236ee-a570-48e9-b727-3bbc35f81e5a
 # ╠═5fc55395-1514-41f8-b26a-712d6d76cbce
 # ╠═24eb88c4-1869-4b6b-a56d-69604f7d3dfb

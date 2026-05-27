@@ -6,6 +6,7 @@ module Structures
 import Base.isless
 
 using ArgCheck
+using JLD2
 using ProgressMeter
 
 export Structure, Site, generate_structures, is_neighbour
@@ -36,10 +37,13 @@ A Hamiltonian path through an NxNxN cubic lattice.
 - `path::Vector{Site}`: Sequence of all N^3 sites, each visited exactly once
 - `contacts::Vector{Tuple{Int, Int}}`: Path index pairs (i, j) where sites are
   lattice-adjacent but not consecutive in the path
+- `contact_partners::Vector{Vector{Int}}`: Adjacency list; `contact_partners[i]`
+  lists all j in contact with position i. For O(degree) delta-energy computation.
 """
 struct Structure{N}
     path::Vector{Site}
     contacts::Vector{Tuple{Int,Int}}
+    contact_partners::Vector{Vector{Int}}
 
     function Structure{N}(path::Vector{Site}) where {N}
         # ---- Validation ----
@@ -57,7 +61,10 @@ struct Structure{N}
             @argcheck is_neighbour(path[i], path[i + 1]) "Consecutive sites must be neighbours"
         end
 
-        return new{Int8(N)}(path, compute_contacts(path))
+        contacts = compute_contacts(path)
+        return new{Int8(N)}(
+            path, contacts, compute_contact_partners(contacts, length(path))
+        )
     end
 end
 
@@ -120,6 +127,21 @@ function compute_contacts(path::Vector{Site})
         end
     end
     return contacts
+end
+
+"""
+    compute_contact_partners(contacts, n) -> Vector{Vector{Int}}
+
+Build an adjacency list from a contact list: `result[i]` contains all j such
+that (i,j) or (j,i) is a contact. For O(degree) delta-energy updates.
+"""
+function compute_contact_partners(contacts::Vector{Tuple{Int,Int}}, n::Int)
+    partners = [Int[] for _ in 1:n]
+    for (i, j) in contacts
+        push!(partners[i], j)
+        push!(partners[j], i)
+    end
+    return partners
 end
 
 ############################################################################################
@@ -280,6 +302,22 @@ Uses grow() recursion + rotation canonicalization to deduplicate.
 function generate_structures(N::Int)
     paths = generate_all_paths(N)
     return [Structure{N}(path) for path in paths]
+end
+
+function generate_and_save_structures(
+    N::Int;
+    filtering=[0.01, 0.1, 1.0],
+    filename=x -> "data/structures_N$(N)_filtering$(x).jld2",
+)
+    all_structures = generate_structures(N)
+    println("Generated $(length(all_structures)) unique structures for N=$N")
+
+    for f in filtering
+        n_save = Int(round(Int, length(all_structures) * f))
+        idx = map(x -> round(Int, x), range(1, length(all_structures); length=n_save))
+        structures = all_structures[idx]
+        JLD2.@save filename(f) structures
+    end
 end
 
 end # module Structure
