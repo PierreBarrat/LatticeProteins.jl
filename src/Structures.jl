@@ -303,6 +303,12 @@ function generate_structures(N::Int)
     paths = generate_all_paths(N)
     return [Structure{N}(path) for path in paths]
 end
+function generate_structures(N::Int, f::Float64)
+    structures = generate_structures(N)
+    n = Int(round(Int, length(structures) * f))
+    idx = map(x -> round(Int, x), range(1, length(structures); length=n))
+    return structures[idx]
+end
 
 function generate_and_save_structures(
     N::Int;
