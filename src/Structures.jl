@@ -145,13 +145,26 @@ function compute_contact_partners(contacts::Vector{Tuple{Int,Int}}, n::Int)
 end
 
 ############################################################################################
-# Symetries
+# Symmetries
 ############################################################################################
 
 # Linear index for a site in the NxNxN lattice (1-based)
-_site_id(s::Site, N::Int) = Int((s.x - 1) * N^2 + (s.y - 1) * N + s.z)
+_site_id(s::Site, N::Integer) = Int((s.x - 1) * N^2 + (s.y - 1) * N + s.z)
 function _id_to_site(id::Integer, N::Int)
     return site((id - 1) ÷ N^2 + 1, (id - 1) % N^2 ÷ N + 1, (id - 1) % N + 1)
+end
+"""
+    site_index_map(S::Structure)
+
+Return a map `M` from integer `i` to position `j` in the folding chain, so that `S.path[M[_site_id(x, y, z)]] == (x, y, z)`. That is, `M[_site_id(x,y,z)]` is the position in the chain that sits at (x, y, z).
+"""
+function site_index_map(S::Structure{N}) where {N}
+    M = zeros(Int, N^3)
+    for (j, site) in enumerate(S.path)
+        i = _site_id(site, N)
+        M[i] = j
+    end
+    return M
 end
 
 """

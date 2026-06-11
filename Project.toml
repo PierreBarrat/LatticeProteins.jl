@@ -7,19 +7,27 @@ authors = ["Pierre Barrat-Charlaix"]
 ArgCheck = "dce04be8-c92d-5529-be00-80e4d2c0e197"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+TreeTools = "62f0eae3-8c0e-4032-a621-7756092209e5"
+UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
 Aqua = "0.8"
 ArgCheck = "2.5.0"
 DelimitedFiles = "1.9.1"
 JLD2 = "0.6.4"
+LinearAlgebra = "1.12.0"
 ProgressMeter = "1.11.0"
 Random = "1.11.0"
 RecipesBase = "1"
+StatsBase = "0.34.11"
 Test = "1.11"
+TreeTools = "0.7, 0.8"
+UnPack = "1.0.2"
 julia = "1.11"
 
 [extras]

@@ -74,6 +74,51 @@ end
     @test S._site_id(S.site(3, 3, 3), 3) == 27
 end
 
+@testset "site_index_map" begin
+    @testset "N=1" begin
+        st = S.Structure{1}([S.site(1, 1, 1)])
+        @test S.site_index_map(st) == [1]
+    end
+
+    @testset "N=2 (explicit)" begin
+        st = S.Structure{2}(PATH2)
+        M = S.site_index_map(st)
+        @test length(M) == 8
+        # inverse of the known path: chain position sitting at each site
+        @test M == [1, 2, 4, 3, 8, 7, 5, 6]
+    end
+
+    @testset "is the inverse of path" begin
+        for st in (S.Structure{2}(PATH2), S.generate_structures(2)...)
+            N = 2
+            M = S.site_index_map(st)
+            @test length(M) == N^3
+            # M is a permutation of chain positions (path visits every site once)
+            @test sort(M) == collect(1:(N^3))
+            # documented property: path[M[site_id(s)]] == s
+            for s in st.path
+                @test st.path[M[S._site_id(s, N)]] == s
+            end
+            # and the other direction: M[site_id(path[j])] == j
+            for (j, s) in enumerate(st.path)
+                @test M[S._site_id(s, N)] == j
+            end
+        end
+    end
+
+    @testset "N=3 round-trip" begin
+        st = first(S.generate_structures(3))
+        N = 3
+        M = S.site_index_map(st)
+        @test length(M) == 27
+        @test sort(M) == collect(1:27)
+        for (j, s) in enumerate(st.path)
+            @test M[S._site_id(s, N)] == j
+            @test st.path[M[S._site_id(s, N)]] == s
+        end
+    end
+end
+
 @testset "rotation table" begin
     for N in (1, 2, 3)
         table = S.generate_rotation_table(N)
