@@ -96,13 +96,10 @@ function _mcmc_init(init::Vector{Int}, parameters::MCMCParameters)
     contact_tensor = build_contact_tensor(parameters.structures)
     field = _resolve_field(parameters.field, length(init))
     energies = map(S -> energy(init, S), parameters.structures)
-    state = MCMCState(
-        copy(init),
-        energies,
-        similar(energies),
-        zeros(length(init)),
-        log(_softmin(energies, parameters.target)),
-    )
+    ϕ_fold = log(_softmin(energies, parameters.target))
+    ϕ_ligand = compute_ligand_phi(parameters.bmodel, init)
+    ϕ = ϕ_fold + ϕ_ligand
+    state = MCMCState(copy(init), energies, similar(energies), zeros(length(init)), ϕ)
     return state, contact_tensor, field
 end
 
@@ -114,15 +111,16 @@ Run `n_steps` Metropolis steps in-place on `state`. No output — mutates `state
 function _advance_mcmc!(
     state::MCMCState,
     contact_tensor::Array{Int8,3},
-    field,
     target::Int,
+    bmodel::Union{Nothing,BindingModel},
     β::Float64,
     n_steps::Int;
+    field=nothing,
     JTT_bias=false,
     rng=Random.GLOBAL_RNG,
 )
     for _ in 1:n_steps
-        metropolis_swap!(state, contact_tensor, field, target, β; JTT_bias, rng)
+        metropolis_swap!(state, contact_tensor, target, bmodel, β; JTT_bias, field, rng)
     end
     return nothing
 end
@@ -145,11 +143,11 @@ Set `progress=true` to display a progress bar over the `n_sequences` sequences.
 function sample_mcmc_chain(
     init::Vector{Int}, parameters::MCMCParameters; rng=Random.GLOBAL_RNG, progress=false
 )
-    @unpack target, β_sampling, JTT_bias = parameters
+    @unpack target, β_sampling, bmodel, JTT_bias = parameters
     state, contact_tensor, field = _mcmc_init(init, parameters)
 
     _advance_mcmc!(
-        state, contact_tensor, field, target, β_sampling, parameters.burnin; JTT_bias, rng
+        state, contact_tensor, target, bmodel, β_sampling, parameters.burnin; JTT_bias, rng
     )
 
     chains = Vector{Vector{Int}}(undef, parameters.n_sequences)
@@ -160,7 +158,7 @@ function sample_mcmc_chain(
     for s in 2:(parameters.n_sequences)
         for _ in 1:(parameters.n_steps)
             accepted, i, a = metropolis_swap!(
-                state, contact_tensor, field, target, β_sampling; JTT_bias, rng
+                state, contact_tensor, target, bmodel, β_sampling; JTT_bias, field, rng
             )
             push!(metrics, (; accepted, i, a))
         end
@@ -181,20 +179,23 @@ Returns whether the move was accepted, the mutated position, and the resulting a
 function metropolis_swap!(
     state::MCMCState,
     contact_tensor::Array{Int8,3},
-    field::Union{Nothing,Matrix{Float64}},
     target::Int,
+    bmodel::Union{Nothing,BindingModel},
     β::Float64;
+    field::Union{Nothing,Matrix{Float64}}=nothing,
     JTT_bias=false,
     rng=Random.GLOBAL_RNG,
 )
     # choose mutation
     i, a, b = pick_mutation(rng, state.sequence, JTT_bias)
 
-    # change in log Pfold
-    ϕ_fold_new = compute_log_pfold!(state, contact_tensor, target, (i, a, b))
+    # log Pfold
+    ϕ_new = compute_log_pfold!(state, contact_tensor, target, (i, a, b))
 
-    # Combine fitnesses
-    ϕ_new = ϕ_fold_new
+    # Ligand binding
+    mutated_sequence = copy(state.sequence)
+    mutated_sequence[i] = b
+    ϕ_new += compute_ligand_phi(bmodel, mutated_sequence) # 0 if bmodel::Nothing
 
     # potentially add bias
     r = if isnothing(field)

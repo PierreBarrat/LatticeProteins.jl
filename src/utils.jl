@@ -74,7 +74,7 @@ const MJ_alphabet_3 = [
     "Pro",
 ]
 
-const MJ_1996 = let
+const MJ_1996::Matrix{Float64} = let
     MJ = readdlm(joinpath(pkgdir(LatticeProteins), "data/MJ_1996.csv"), Float64) # 20x20
     alphabet_permutation = sortperm(MJ_alphabet)
     MJ[alphabet_permutation, alphabet_permutation]

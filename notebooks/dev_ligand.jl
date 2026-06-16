@@ -114,31 +114,8 @@ md"""
 # Binding probabilities
 """
 
-# ╔═╡ 1c65fc98-be7e-45af-a05a-834c938a2f84
-structures = LP.Structures.generate_structures(3)
-
-# ╔═╡ 9a727f50-efd4-48bf-bc26-d3b3fd8f8878
-target = structures[1]
-
-# ╔═╡ 221be9ab-7edf-44bc-943f-f643a477aed3
-bmodel = BindingModel{Int8(3)}(
-	ligands=[
-		Ligand(;beads=[3, 3, 3, 3, 3], shape=:cross), 
-		Ligand(;beads=[9, 9, 9, 9, 9], shape=:cross) 
-	],
-	target=target,
-	specificities=[0., 0.],
-	μ=15,
-)
-
 # ╔═╡ 5eec4f20-b69f-443d-af1e-a3f2711b8111
 sequence = rand(1:20, 27)
-
-# ╔═╡ 2c7c19a5-3aea-4175-a39f-c5fdc86f54e4
-LP.binding_energies(bmodel, sequence)
-
-# ╔═╡ f85d831e-fb85-4300-80aa-59fac0160901
-LP.binding_probabilities(bmodel, sequence)
 
 # ╔═╡ 5a45302d-fa42-48a8-81f5-c7ec614f586d
 LP.MJ_1996[4, 9]
@@ -164,6 +141,91 @@ LP.MJ_1996[9, :] |> sortperm
 # ╔═╡ 4858a6b2-dd8b-49d1-a5ef-9458e8e9478f
 LP.MJ_1996[10, :] |> mean
 
+# ╔═╡ 5f969c85-e8ee-4355-b63c-c7a68b2f2abe
+md"""
+# MCMC
+"""
+
+# ╔═╡ 93c8f931-eaa7-4486-a6b6-f8bab43466d0
+f = 0.1
+
+# ╔═╡ 8689f611-15e3-4b55-b980-877cccf3ec0d
+structures =  LP.Structures.generate_structures(3, f);
+
+# ╔═╡ 9a727f50-efd4-48bf-bc26-d3b3fd8f8878
+target = structures[1]
+
+# ╔═╡ 221be9ab-7edf-44bc-943f-f643a477aed3
+bmodel = BindingModel{Int8(3)}(
+	ligands=[
+		Ligand(;beads=[3, 3, 3, 3, 3], shape=:cross), 
+		Ligand(;beads=[9, 9, 9, 9, 9], shape=:cross) 
+	],
+	target=target,
+	specificities=[0., 0., 0.],
+	μ=15,
+)
+
+# ╔═╡ 2c7c19a5-3aea-4175-a39f-c5fdc86f54e4
+LP.binding_energies(bmodel, sequence)
+
+# ╔═╡ f85d831e-fb85-4300-80aa-59fac0160901
+LP.binding_probabilities(bmodel, sequence)
+
+# ╔═╡ 0b4f5317-2dca-4303-9e71-ffa58fb2af6e
+default_target = 1
+
+# ╔═╡ 15d39597-8a55-4175-93e6-ec3491640836
+n_sequences_per_chain = 50
+
+# ╔═╡ 3bbff889-6177-4953-8e4f-470d5ec1da2d
+n_steps_between_sequences = 25
+
+# ╔═╡ c53ae14b-f55d-4b5b-8f96-29d303e24220
+β = 100
+
+# ╔═╡ 05d7252f-27cf-4b86-86bc-b51c9cfd4852
+binding_model = BindingModel{Int8(3)}(
+	ligands=[
+		Ligand(;beads=[3, 3, 3, 3, 3], shape=:cross), 
+		# Ligand(;beads=[9, 9, 9, 9, 9], shape=:cross) 
+	],
+	target=target,
+	specificities=[1., 0.],
+	μ=20,
+)
+
+# ╔═╡ ac216d9b-fbe5-4891-86b3-6157d325a948
+chains, metrics = let
+	parameters = LP.MCMCParameters(;
+		n_steps=10,
+		n_sequences=100,
+		structures,
+		target=default_target,
+		bmodel=binding_model,
+		burnin=0.,
+		β_sampling=β,
+		JTT_bias=false,
+	)
+	chain, metrics = LP.sample_mcmc_chain(rand(1:20, 27), parameters)
+end
+
+# ╔═╡ 42906e7a-e224-4339-8d4a-6928458115ca
+let
+	plot([LP.fold_prob(s, structures, default_target) for s in chains])
+end
+
+# ╔═╡ de6d7750-891b-4d0e-a880-ee017a9613bd
+
+
+# ╔═╡ a9ef78d5-48e6-496f-827b-b693764332ba
+let
+	[LP.binding_probabilities(binding_model, s) for s in chains]
+end
+
+# ╔═╡ 56913cde-e107-4914-ba8d-40fa35efd6aa
+[LP.compute_ligand_phi(binding_model, s) for s in chains]
+
 # ╔═╡ Cell order:
 # ╠═5cd13410-64b0-11f1-81f3-713fcda94f0a
 # ╠═62f1f8f2-a51b-4d3a-b82a-c1b1b6a6a710
@@ -185,7 +247,6 @@ LP.MJ_1996[10, :] |> mean
 # ╟─e29ccd3f-3b47-4c10-becb-960f1f60d996
 # ╠═3c8de6d6-21c4-4fe7-935b-d6411704d6e2
 # ╟─7f264679-e8a2-4bed-8b7e-7af933471a8f
-# ╠═1c65fc98-be7e-45af-a05a-834c938a2f84
 # ╠═9a727f50-efd4-48bf-bc26-d3b3fd8f8878
 # ╠═221be9ab-7edf-44bc-943f-f643a477aed3
 # ╠═5eec4f20-b69f-443d-af1e-a3f2711b8111
@@ -199,3 +260,16 @@ LP.MJ_1996[10, :] |> mean
 # ╠═104c0512-c26f-43cc-8724-e5a27c2a8f4b
 # ╠═1d77d89a-97ec-4ab2-9add-13672dd0729a
 # ╠═4858a6b2-dd8b-49d1-a5ef-9458e8e9478f
+# ╠═5f969c85-e8ee-4355-b63c-c7a68b2f2abe
+# ╠═93c8f931-eaa7-4486-a6b6-f8bab43466d0
+# ╠═8689f611-15e3-4b55-b980-877cccf3ec0d
+# ╠═0b4f5317-2dca-4303-9e71-ffa58fb2af6e
+# ╠═15d39597-8a55-4175-93e6-ec3491640836
+# ╠═3bbff889-6177-4953-8e4f-470d5ec1da2d
+# ╠═c53ae14b-f55d-4b5b-8f96-29d303e24220
+# ╠═ac216d9b-fbe5-4891-86b3-6157d325a948
+# ╠═42906e7a-e224-4339-8d4a-6928458115ca
+# ╠═05d7252f-27cf-4b86-86bc-b51c9cfd4852
+# ╠═de6d7750-891b-4d0e-a880-ee017a9613bd
+# ╠═a9ef78d5-48e6-496f-827b-b693764332ba
+# ╠═56913cde-e107-4914-ba8d-40fa35efd6aa

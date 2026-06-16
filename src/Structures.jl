@@ -161,6 +161,7 @@ Return a map `M` from integer `i` to position `j` in the folding chain, so that 
 function site_index_map(S::Structure{N}) where {N}
     M = zeros(Int, N^3)
     for (j, site) in enumerate(S.path)
+        site = S.path[j]
         i = _site_id(site, N)
         M[i] = j
     end

@@ -14,6 +14,13 @@ using ArgCheck # repeated here for standalone include()
     end
 end
 
+function Base.:(==)(l1::Ligand, l2::Ligand)
+    return l1.beads == l2.beads &&
+           l1.shape == l2.shape &&
+           l1.reflection == l2.reflection &&
+           l1.rotation == l2.rotation
+end
+
 cross_cells() = [(0, 0), (0, 1), (1, 0), (0, -1), (-1, 0)]
 rod3_cells() = [(0, 0), (-1, 0), (1, 0)]
 
@@ -41,7 +48,7 @@ struct Face
     axis::Int # axis orthogonal to the face (1 -> x, 2 -> y, 3 -> z)
     side::Int # side of the cube: 1 or N
 end
-faces(N) = [Face(1, 1), Face(1, N), Face(2, 1), Face(2, N), Face(3, 1), Face(3, N)]
+faces(N) = Face[Face(1, 1), Face(1, N), Face(2, 1), Face(2, N), Face(3, 1), Face(3, N)]
 
 """
     embed(r2::Tuple{Int, Int}, face::Face)
@@ -54,12 +61,12 @@ Embed 2D coordinates `r2` of the form `(u, v)` into a 3D site that lives on `fac
 or `face=Face(2, 4)`, `r2=(1, 2)`: output `(1, 4, 2)` (far face axis to y for N=4)
 """
 function embed(r2::Tuple{Int,Int}, face::Face)
-    r3 = [0, 0, 0]
+    r3 = Int[0, 0, 0]
     r3[face.axis] = face.side
     u, v = filter(!=(face.axis), [1, 2, 3]) # inplace axes
     r3[u] = r2[1]
     r3[v] = r2[2]
-    return (x=Int8(r3[1]), y=Int8(r3[2]), z=Int8(r3[3]))
+    return Structures.site(r3...)
 end
 embed(patch::Vector{Tuple{Int,Int}}, face::Face) = [embed(r2, face) for r2 in patch]
 
@@ -95,12 +102,12 @@ The vector `F` of faces is such that `bps[i]` is a patch corresponding to `F[i]`
 """
 function binding_patches(ligand::Ligand, N::Integer)
     patches_2D = binding_patches_2D(ligand, N) # for an arbitrary face
-    patches = []
-    F = [] # storing binding faces for potential analysis
+    patches = Vector{Vector{Structures.Site}}(undef, 0)
+    F = Face[] # storing binding faces for potential analysis
     for f in faces(N)
         # embed each (u, v) 2D patch onto the face, returning (x, y, z)
         append!(patches, [embed(p, f) for p in patches_2D])
-        append!(F, [f for _ in 1:length(patches_2D)])
+        append!(F, repeat([f], length(patches_2D)))
     end
     return patches, F
 end
@@ -128,16 +135,41 @@ end
 ### BINDING
 ############################################################################################
 
-@kwdef struct BindingModel{N}
+struct BindingModel{N}
     ligands::Vector{Ligand}
     target::Structure{N}
-    specificities::Vector{Float64} # one per ligand
-    sim::Vector{Int} = Structures.site_index_map(target) # site_index_map
-    μ::Float64 = 0.0 # chemical potential
+    specificities::Vector{Float64} # one per ligand + unbound
+    μ::Float64 # chemical potential
+    sim::Vector{Int} # site_index_map
+    patches::Vector{Vector{Vector{Structures.Site}}} # nested N_ligands x N_patches x patch
+
     # μ = Inf --> complete competition between ligands (each has infinite concentration)
     # μ = -Inf (numerically bad but ...) binding probabilities are independent
     # as the unbound state gets almost all the mass.
+
+    function BindingModel{N}(
+        ligands, target::Structure, specificities, μ, sim, patches
+    ) where {N}
+        @argcheck length(specificities) == length(ligands) + 1 """Expected one specificity
+        for each ligand plus one for unbound state.
+        Instead $(length(ligands)) ligands and $(length(specificities)) specificities.
+        """
+
+        return new{N}(ligands, target, specificities, Float64(μ), sim, patches)
+    end
 end
+
+"""
+    BindingModel(; ligands, target, specificities, μ)
+"""
+function BindingModel(;
+    ligands::Vector{Ligand}, target::Structure{N}, specificities::Vector{Float64}, μ::Real
+) where {N}
+    patches = [binding_patches(ligand, N)[1] for ligand in ligands]
+    sim = Structures.site_index_map(target)
+    return BindingModel{N}(ligands, target, specificities, μ, sim, patches)
+end
+
 """
     binding_energies(ligand::Ligand, structure::Structure, sequence::Vector{Int})
 
@@ -145,13 +177,14 @@ Return all binding energies for this ligand (all faces & orientations), as well 
 """
 function binding_energies(
     ligand::Ligand,
+    patches::Vector{Vector{Structures.Site}},
     structure::Structure{N},
     sequence::Vector{Int};
     site_index_map=Structures.site_index_map(structure),
 ) where {N}
     site_id = LatticeProteins.Structures._site_id
-    patches, faces = binding_patches(ligand, N)
-    E = map(patches) do patch # [(x1,y1,z1), ...]
+    energies = zeros(Float64, length(patches))
+    for (p, patch) in enumerate(patches)
         E = 0.0
         for (i_ligand, site) in enumerate(patch)
             i_chain = site_index_map[site_id(site, N)]
@@ -159,9 +192,17 @@ function binding_energies(
             bead = ligand.beads[i_ligand]
             E += MJ_1996[aa, bead]
         end
-        E
+        energies[p] = E
     end
-    return E, faces
+    return energies
+end
+# Version that computes binding patches
+function binding_energies(
+    ligand::Ligand, structure::Structure{N}, sequence::Vector{Int}; kwargs...
+) where {N}
+    patches, faces = binding_patches(ligand, N)
+    energies = binding_energies(ligand, patches, structure, sequence; kwargs...)
+    return energies
 end
 """
     binding_energies(model::BindingModel, sequence::Vector{Int})
@@ -169,8 +210,8 @@ end
 For each ligand in the model, return (i) binding energies of all configurations (ii) corresponding faces.
 """
 function binding_energies(model::BindingModel, sequence::Vector{Int})
-    return map(model.ligands) do ligand
-        binding_energies(ligand, model.target, sequence; site_index_map=model.sim)
+    return map(zip(model.ligands, model.patches)) do (ligand, patches)
+        binding_energies(ligand, patches, model.target, sequence; site_index_map=model.sim)
     end
 end
 """
@@ -179,8 +220,9 @@ end
 Return binding probabilities of all ligands in `model` to `sequence`. Ligands are in competition for binding. Last element of return array is the probability of the unbound state.
 """
 function binding_probabilities(model::BindingModel, sequence::Vector{Int})
-    energies = [x[1] for x in binding_energies(model, sequence)] # ignore faces
-    push!(energies, [-model.μ]) # unbound state
+    energies = [x for x in binding_energies(model, sequence)]
+    push!(energies, [model.μ]) # unbound state
+    # μ ~ energy cost of being in the solution
 
     # Softmin - Zs contains ligand-specific partition functions
     E_min = minimum(Iterators.flatten(energies))
@@ -190,3 +232,9 @@ function binding_probabilities(model::BindingModel, sequence::Vector{Int})
     Z_tot = sum(Zs)
     return Zs / Z_tot
 end
+
+function compute_ligand_phi(model::BindingModel, sequence::Vector{Int})
+    ϕs = map(log, binding_probabilities(model, sequence))
+    return sum(λ * ϕ for (λ, ϕ) in zip(model.specificities, ϕs))
+end
+compute_ligand_phi(::Nothing, sequence::Vector{Int}) = 0.0

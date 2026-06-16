@@ -9,6 +9,8 @@ using StatsBase
 using TreeTools
 using UnPack
 
+import Base: ==
+
 include("Structures.jl")
 using .Structures
 export Structure
